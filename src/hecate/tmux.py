@@ -39,11 +39,11 @@ class Tmux(object):
 
     def execute_command(self, *command):
         try:
-            cmd = [TMUX, "-u", "-L", self.name] + list(map(str, command))
+            cmd = [TMUX, "-u", "-f", os.devnull, "-L", self.name] + list(map(str, command))
             return subprocess.check_output(
                 cmd,
                 stderr=subprocess.STDOUT
-            ).decode('ascii')
+            ).decode('utf-8')
         except subprocess.CalledProcessError as e:
             if b"failed to connect to server: Connection refused" in e.output:
                 raise DeadServer(e.output)
