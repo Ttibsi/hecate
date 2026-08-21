@@ -1,7 +1,8 @@
-import subprocess
-import re
 from contextlib import contextmanager
 import os
+import re
+import subprocess
+import sys
 import tempfile
 
 
@@ -40,14 +41,36 @@ class Tmux(object):
     def execute_command(self, *command):
         try:
             cmd = [TMUX, "-u", "-f", os.devnull, "-L", self.name] + list(map(str, command))
-            return subprocess.check_output(
+            co = subprocess.check_output(
                 cmd,
                 stderr=subprocess.STDOUT
-            ).decode('utf-8')
+            )
+
+            if "list-buffers" in command:
+                return self.cleaned_up_output(co)
+
+            return co.decode()
         except subprocess.CalledProcessError as e:
             if b"failed to connect to server: Connection refused" in e.output:
                 raise DeadServer(e.output)
             raise CommandFailed(e.output)
+        except UnicodeDecodeError:
+            print(f"Failed CMD: {cmd}", file=sys.stderr)
+
+    # When calling `list-buffers`, tmux reads the first 200 utf8 characters in a 
+    # buffer, but that gets turned into raw bytes by python's `check_output()`.
+    # We need to strip off any trailing unicode continuation characters where 
+    # only half a character was pulled in to hecate
+    def cleaned_up_output(self, raw_output: bytes) -> str:
+        if not len(raw_output):
+            return ""
+
+        before, _, after = raw_output.rpartition(b"\\n")
+        out = before if len(before) else after
+        while out[-1] > 127:
+            out = out[:-1]
+
+        return out.decode()
 
     def new_session(
         self, width=80, height=24, window=None, name=None, command=None
